@@ -61,7 +61,3 @@ Run `python lineage_scraper.py --help` for the full generated help text.
 
 - SQLite at `cache/pages.db` (HTML and extracted links per URL).
 - Cache is on by default; use `--no-cache` to disable or `--refresh` to bypass reads.
-
-## Legacy
-
-Previous async crawler and related files are archived under `old/`.

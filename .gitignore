@@ -37,17 +37,9 @@ ENV/
 htmlcov/
 .mypy_cache/
 
-# Data (don't commit downloaded files)
-lineage_data/
-*.csv
-*.xlsx
-*.xls
-*.parquet
-
 # OS
 .DS_Store
 Thumbs.db
-.cache/
 uv.lock
 cache/
 data/
