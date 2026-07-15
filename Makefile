@@ -16,7 +16,7 @@ lint:
 	python -m ruff check lineage_scraper.py
 
 test:
-	python -m pytest -q --disable-warnings --maxfail=1 --ignore=old
+	python -m pytest -q --disable-warnings --maxfail=1 --ignore=old -p no:libtmux
 
 clean:
 	rm -rf build/ dist/ *.egg-info/
