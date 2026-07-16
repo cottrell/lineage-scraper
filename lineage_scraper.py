@@ -113,7 +113,15 @@ def get_robots_crawl_delay(base_url: str, cfg: dict) -> float | None:
 
 def is_captcha(html: str) -> bool:
     text = html.lower()
-    return "captcha" in text or "shield" in text
+    if "attention required! | cloudflare" in text or "cf-challenge-error" in text:
+        return True
+    if "just a moment..." in text and "cloudflare" in text:
+        return True
+    if "verify you are human" in text and ("captcha" in text or "cloudflare" in text or "turnstile" in text):
+        return True
+    if "cf-turnstile-wrapper" in text:
+        return True
+    return False
 
 
 def maybe_accept_cookies(page) -> None:

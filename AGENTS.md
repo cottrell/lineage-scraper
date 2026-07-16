@@ -10,30 +10,19 @@ Full flags: `uv run lineage_scraper.py --help`. Details: `README.md`.
 Output: `data/nodes.json` + `data/edges.json` (default), or `data/openlineage.json` with `--output-format openlineage`.
 Cache: SQLite at `cache/pages.db`, on by default (`--no-cache` / `--refresh`).
 
+<!-- AISWARM/NUDGE GUIDELINES START -->
 ## Swarm
 
-Swarm workflow: read first:
-- Runtime map: `/tmp/nudge-swarm/lineage-scraper/runtime.json`
-- Self-awareness note: `/tmp/nudge-swarm/lineage-scraper/self-awareness.txt`
+Swarm CLI: `aiswarm` (on PATH; `make install-aiswarm` from the nudge repo).
 
-Use as source of truth for:
-- tmux pane targets
-- monitor sockets, live state
-- babysit pid/log/spec/state files
+Read workflow first:
+- `aiswarm` — common commands cheat sheet
+- `aiswarm instructions overview` — required agent briefing
+- `aiswarm instructions handoff` / `tasks` — peer send and backlog dispatch
+- `aiswarm this` — this swarm's config + runtime.json path
 
-Swarm CLI: `aiswarm`
-Prereq: `aiswarm` must be on `PATH`; install it with `make install-aiswarm`.
+After start, machine map (not git): `/tmp/nudge-swarm/lineage-scraper/runtime.json`
 
-Messaging (durable, preferred):
-- Use the comms log for reliability between agents: `aiswarm send <cfg> <pane> "msg"` or `log_broadcast`.
-- Inspect: `aiswarm log <cfg> [--pending] [--pane 0.2]`, `aiswarm cursors <cfg>`.
-- Direct/manual still works: `./tmux-send <target> "message"`.
-
-Worker loop:
-- `aiswarm start <cfg>` starts the base comms worker for `monitor: true` panes.
-- The worker consumes the log and delivers via `tmux-send` when the pane is idle.
-- Babysit prompt nudges are independent; use `aiswarm babysit start|stop <cfg>`.
-
-Do NOT use raw `tmux send-keys ... Enter`.
-
-Swarm scripts: `swarm/`.
+Config: `.aiswarm/config.yaml` (cwd walk-up), `$AISWARM_CONFIG`, or explicit path.
+Messaging: `aiswarm send <pane> "msg"` (durable log). Do NOT raw `tmux send-keys`.
+<!-- AISWARM/NUDGE GUIDELINES END -->
