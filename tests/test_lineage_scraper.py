@@ -156,3 +156,61 @@ def test_fetch_page_limiter_reset(tmp_path: Path):
     assert limiter.delay == 0.1
 
     cache.close()
+
+
+def test_config_handling(tmp_path: Path):
+    from lineage_scraper import load_config, resolve_fetcher_params, DEFAULT_USER_AGENT
+
+    # Write a test config.json
+    cfg_file = tmp_path / "config.json"
+    cfg_content = {
+        "global": {
+            "headers": {
+                "User-Agent": "GlobalBot/1.0",
+                "X-Global-Header": "yes"
+            },
+            "cookies": {
+                "session": "global-sess-id"
+            }
+        },
+        "httpx": {
+            "headers": {
+                "User-Agent": "HttpxBot/2.0",
+                "X-Httpx-Header": "httpx-specific"
+            },
+            "cookies": {
+                "session": "httpx-sess-id",
+                "httpx-only": "cookie-val"
+            }
+        }
+    }
+    cfg_file.write_text(json.dumps(cfg_content), encoding="utf-8")
+
+    # 1. Test load_config
+    loaded = load_config(cfg_file)
+    assert loaded["global"]["cookies"]["session"] == "global-sess-id"
+
+    # 2. Test resolve_fetcher_params merging and precedence
+    # A. Case where user-agent is NOT overridden by CLI (so config specific UA wins)
+    headers, cookies, ua = resolve_fetcher_params("httpx", DEFAULT_USER_AGENT, loaded)
+    assert ua == "HttpxBot/2.0"
+    assert headers["User-Agent"] == "HttpxBot/2.0"
+    assert headers["X-Global-Header"] == "yes"
+    assert headers["X-Httpx-Header"] == "httpx-specific"
+    assert cookies["session"] == "httpx-sess-id"
+    assert cookies["httpx-only"] == "cookie-val"
+
+    # B. Case where user-agent is overridden by CLI
+    headers_cli, cookies_cli, ua_cli = resolve_fetcher_params("httpx", "CLI-UA/3.0", loaded)
+    assert ua_cli == "CLI-UA/3.0"
+    assert headers_cli["User-Agent"] == "CLI-UA/3.0"
+
+    # C. Check playwright specific domain conversion
+    # Verify how playwright converts dict cookies
+    # We can test that manually, but let's test resolve_fetcher_params for playwright
+    headers_pw, cookies_pw, ua_pw = resolve_fetcher_params("playwright", DEFAULT_USER_AGENT, loaded)
+    # playwright has no overrides, so it falls back to global
+    assert ua_pw == "GlobalBot/1.0"
+    assert headers_pw["User-Agent"] == "GlobalBot/1.0"
+    assert cookies_pw["session"] == "global-sess-id"
+

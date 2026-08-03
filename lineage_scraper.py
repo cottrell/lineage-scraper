@@ -79,6 +79,97 @@ def parse_crawl_delay(robots_text: str) -> float | None:
     return None
 
 
+def load_config(config_path: Path | None) -> dict:
+    """Loads a JSON config file for headers/cookies per strategy."""
+    if config_path is None:
+        default_path = Path.cwd() / "config.json"
+        if default_path.exists():
+            config_path = default_path
+        else:
+            return {}
+
+    log.info(f"Loading config from {config_path}")
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        
+        try:
+            mode = config_path.stat().st_mode
+            if (mode & 0o044):
+                has_cookies = False
+                for section in data.values():
+                    if isinstance(section, dict) and "cookies" in section and section["cookies"]:
+                        has_cookies = True
+                        break
+                if has_cookies:
+                    log.warning(
+                        f"Security Warning: {config_path.name} contains cookies but is world/group readable. "
+                        "Run `chmod 600 config.json` to secure it."
+                    )
+        except Exception:
+            pass
+
+        return data
+    except Exception as e:
+        log.error(f"Error loading config file {config_path}: {e}")
+        return {}
+
+
+def resolve_fetcher_params(fetcher: str, user_agent_cli: str, config_data: dict) -> tuple[dict, dict, str]:
+    """
+    Resolves headers, cookies, and User-Agent for a given fetcher strategy.
+    Precedence:
+    - User-Agent: CLI --user-agent (if not default) > fetcher-specific config UA > global config UA > default UA.
+    - Headers: default headers < global config headers < fetcher-specific config headers.
+    - Cookies: global config cookies < fetcher-specific config cookies.
+    """
+    ua = DEFAULT_USER_AGENT
+    global_cfg = config_data.get("global", {})
+    global_headers = global_cfg.get("headers", {})
+    
+    def get_case_insensitive(d: dict, key: str) -> str | None:
+        for k, v in d.items():
+            if k.lower() == key.lower():
+                return v
+        return None
+
+    global_ua = get_case_insensitive(global_headers, "User-Agent")
+    if global_ua:
+        ua = global_ua
+        
+    fetcher_cfg = config_data.get(fetcher, {})
+    fetcher_headers = fetcher_cfg.get("headers", {})
+    fetcher_ua = get_case_insensitive(fetcher_headers, "User-Agent")
+    if fetcher_ua:
+        ua = fetcher_ua
+
+    if user_agent_cli != DEFAULT_USER_AGENT:
+        ua = user_agent_cli
+
+    headers = {**DEFAULT_BROWSER_HEADERS}
+    
+    for k, v in global_headers.items():
+        headers[k] = v
+        
+    for k, v in fetcher_headers.items():
+        headers[k] = v
+        
+    headers["User-Agent"] = ua
+
+    cookies = {}
+    global_cookies = global_cfg.get("cookies", {})
+    if isinstance(global_cookies, dict):
+        cookies.update(global_cookies)
+        
+    fetcher_cookies = fetcher_cfg.get("cookies", {})
+    if isinstance(fetcher_cookies, dict):
+        cookies.update(fetcher_cookies)
+    elif isinstance(fetcher_cookies, list):
+        cookies = fetcher_cookies
+
+    return headers, cookies, ua
+
+
 def get_robots_crawl_delay(base_url: str, cfg: dict) -> float | None:
     if not base_url:
         return None
@@ -93,7 +184,7 @@ def get_robots_crawl_delay(base_url: str, cfg: dict) -> float | None:
         client = cfg.get("httpx_client")
         if client is None:
             import httpx
-            headers = {**DEFAULT_BROWSER_HEADERS, "User-Agent": cfg["user_agent"]}
+            headers = cfg.get("httpx_headers", {**DEFAULT_BROWSER_HEADERS, "User-Agent": cfg["user_agent"]})
             resp = httpx.get(robots_url, headers=headers, timeout=10, follow_redirects=True)
         else:
             resp = client.get(robots_url, timeout=10)
@@ -193,7 +284,20 @@ def fetch_with_playwright(url: str, cfg: dict) -> str:
     if ctx is None:
         pw = sync_playwright().start()
         browser = pw.chromium.launch(headless=cfg["headless"])
-        context = browser.new_context(user_agent=cfg["user_agent"])
+        headers = cfg.get("playwright_headers", {})
+        cookies = cfg.get("playwright_cookies", {})
+        ua = cfg.get("playwright_user_agent", cfg["user_agent"])
+        context = browser.new_context(user_agent=ua, extra_http_headers=headers)
+        if cookies:
+            if isinstance(cookies, list):
+                context.add_cookies(cookies)
+            elif isinstance(cookies, dict):
+                parsed_url = urlparse(url)
+                domain = parsed_url.hostname or ""
+                pw_cookies = []
+                for name, val in cookies.items():
+                    pw_cookies.append({"name": str(name), "value": str(val), "domain": domain, "path": "/"})
+                context.add_cookies(pw_cookies)
         page = context.new_page()
         cfg["pw_ctx"] = {"pw": pw, "browser": browser, "context": context, "page": page}
     else:
@@ -211,10 +315,11 @@ def fetch_with_playwright(url: str, cfg: dict) -> str:
 def fetch_with_httpx(url: str, cfg: dict) -> str:
     import httpx
 
-    headers = {**DEFAULT_BROWSER_HEADERS, "User-Agent": cfg["user_agent"]}
+    headers = cfg.get("httpx_headers", {**DEFAULT_BROWSER_HEADERS, "User-Agent": cfg["user_agent"]})
+    cookies = cfg.get("httpx_cookies")
     client = cfg.get("httpx_client")
     if client is None:
-        client = httpx.Client(headers=headers, timeout=30, follow_redirects=True)
+        client = httpx.Client(headers=headers, cookies=cookies, timeout=30, follow_redirects=True)
         cfg["httpx_client"] = client
     resp = client.get(url)
     resp.raise_for_status()
@@ -227,7 +332,12 @@ def fetch_with_cloudscraper(url: str, cfg: dict) -> str:
     scraper = cfg.get("cloudscraper_client")
     if scraper is None:
         scraper = cloudscraper.create_scraper(browser={"browser": "chrome", "platform": "windows", "mobile": False})
-        scraper.headers.update({"User-Agent": cfg["user_agent"]})
+        headers = cfg.get("cloudscraper_headers", {})
+        cookies = cfg.get("cloudscraper_cookies")
+        if headers:
+            scraper.headers.update(headers)
+        if cookies:
+            scraper.cookies.update(cookies)
         cfg["cloudscraper_client"] = scraper
     resp = scraper.get(url, timeout=30)
     resp.raise_for_status()
@@ -471,6 +581,7 @@ def save_links(records: dict[str, dict], cfg: dict) -> None:
 @argh.arg("--fetcher", help="Fetcher backend: playwright, httpx, cloudscraper")
 @argh.arg("--user-agent", help="User-Agent header")
 @argh.arg("--cache-file", help="Path to cache file")
+@argh.arg("--config", help="Path to config JSON file for headers/cookies")
 @argh.arg("-v", "--verbose", action="count", default=0, help="Verbosity: -v=info, -vv=debug")
 def main(
     url: str,
@@ -486,6 +597,7 @@ def main(
     fetcher: str = DEFAULT_FETCHER,
     user_agent: str = DEFAULT_USER_AGENT,
     cache_file: str = str(DEFAULT_CACHE_FILE),
+    config: str = None,
     verbose: int = 0,
 ) -> None:
     level = logging.WARNING if verbose == 0 else logging.INFO if verbose == 1 else logging.DEBUG
@@ -513,6 +625,17 @@ def main(
         "user_agent": user_agent,
         "cache_file": Path(cache_file),
     }
+
+    config_data = load_config(Path(config) if config else None)
+    
+    for f in ["httpx", "cloudscraper", "playwright"]:
+        f_headers, f_cookies, f_ua = resolve_fetcher_params(f, user_agent, config_data)
+        cfg[f"{f}_headers"] = f_headers
+        cfg[f"{f}_cookies"] = f_cookies
+        cfg[f"{f}_user_agent"] = f_ua
+        
+    cfg["user_agent"] = cfg.get(f"{fetcher.lower()}_user_agent", user_agent)
+
     cfg["cache"] = Cache(cfg["cache_file"], enabled=cfg["use_cache"], refresh=cfg["cache_refresh"])
 
     records: dict[str, dict] = {}

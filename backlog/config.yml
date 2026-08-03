@@ -1,6 +1,6 @@
 project_name: "lineage-scraper"
 default_status: "To Do"
-statuses: ["To Do", "In Progress", "Done"]
+statuses: ["To Do", "In Progress", "Defer", "Backlog", "Done"]
 labels: []
 date_format: yyyy-mm-dd
 max_column_width: 20
