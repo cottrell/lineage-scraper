@@ -1,0 +1,6 @@
+session_name: ops-lineage-scraper
+start_directory: ./
+windows:
+  - window_name: backlog-browser
+    panes:
+      - backlog browser -p 6432 --no-open & sleep 0.5 && socat TCP6-LISTEN:6432,ipv6only,fork,reuseaddr TCP4:127.0.0.1:6432
