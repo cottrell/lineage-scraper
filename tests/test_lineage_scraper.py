@@ -2,12 +2,17 @@ import json
 from pathlib import Path
 
 from lineage_scraper import (
+    DEFAULT_BROWSER_HEADERS,
     Cache,
     RateLimiter,
     infer_file_type,
     parse_crawl_delay,
     save_links,
 )
+
+
+def test_default_browser_headers_no_accept_encoding():
+    assert "Accept-Encoding" not in DEFAULT_BROWSER_HEADERS
 
 
 def test_infer_file_type_patterns():
@@ -17,6 +22,13 @@ def test_infer_file_type_patterns():
     assert infer_file_type("https://x/dataexport?foo=1", "") == "csv"
     assert infer_file_type("https://x/path/report.pdf", "") == "pdf"
     assert infer_file_type("https://x/path/report", "see PDF here") == "pdf"
+    assert infer_file_type("https://x/path/archive.zip", "") == "zip"
+    assert infer_file_type("https://x/path/archive.tar", "") == "tar"
+    assert infer_file_type("https://x/path/archive.gz", "") == "gzip"
+    assert infer_file_type("https://x/path/archive.tgz", "") == "tar"
+    assert infer_file_type("https://x/path/archive.7z", "") == "7z"
+    assert infer_file_type("https://x/download?file=data.zip", "") == "zip"
+    assert infer_file_type("https://x/path/bundle", "Download ZIP archive") == "zip"
     assert infer_file_type("https://x/path/report", "") == "unknown"
 
 

@@ -34,7 +34,6 @@ DEFAULT_DELAY = 0.5
 DEFAULT_BROWSER_HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "en-GB,en;q=0.5",
-    "Accept-Encoding": "gzip, deflate, br",
     "DNT": "1",
     "Connection": "keep-alive",
     "Upgrade-Insecure-Requests": "1",
@@ -455,6 +454,11 @@ def infer_file_type(url: str, link_text: str) -> str:
             ".yaml": "yaml",
             ".yml": "yaml",
             ".pdf": "pdf",
+            ".zip": "zip",
+            ".tar": "tar",
+            ".gz": "gzip",
+            ".tgz": "tar",
+            ".7z": "7z",
         }
         ft = ext_map.get(ext)
         if ft:
@@ -470,6 +474,11 @@ def infer_file_type(url: str, link_text: str) -> str:
         (r"\.xml($|\?)", "xml"),
         (r"\.xlsx?($|\?)", "excel"),
         (r"\.pdf($|\?)", "pdf"),
+        (r"\.zip($|\?)", "zip"),
+        (r"\.tar($|\?)", "tar"),
+        (r"\.gz($|\?)", "gzip"),
+        (r"\.tgz($|\?)", "tar"),
+        (r"\.7z($|\?)", "7z"),
     ]
     lower = url.lower()
     for pattern, ft in patterns:
@@ -478,6 +487,8 @@ def infer_file_type(url: str, link_text: str) -> str:
 
     if "pdf" in link_text.lower():
         return "pdf"
+    if "zip" in link_text.lower():
+        return "zip"
     return "unknown"
 
 def save_links(records: dict[str, dict], cfg: dict) -> None:
